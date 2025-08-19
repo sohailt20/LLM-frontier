@@ -1,0 +1,138 @@
+         LLM Frontier Training Setup + Archive Instructions
+
+This document provides:
+
+   Step-by-step instructions to set up a virtual environment 
+     and install Megatron-LM + DeepSpeed on Frontier (MI250X)
+  
+   SLURM job examples for Megatron-only, DeepSpeed+Megatron, and DDP
+
+   Instructions to reconstruct the compressed archive split into 
+     GitHub-friendly parts (< 2 GB each)
+
+1. HOW TO RECONSTRUCT THE FULL SETUP ARCHIVE (VERSION A)
+
+These instructions are for the split archive named:
+
+  LLM-frontier_clean.tar.gz.part_000
+  LLM-frontier_clean.tar.gz.part_001
+  LLM-frontier_clean.tar.gz.part_002
+  ...
+
+Steps:
+
+1) Download all parts from the GitHub "Releases" page:
+   https://github.com/sohailt20/LLM-frontier/releases
+
+2) Reconstruct:
+   cat LLM-frontier_clean.tar.gz.part_* > LLM-frontier_clean.tar.gz
+
+3) (Optional) Verify checksum:
+   sha256sum -c LLM-frontier_clean.tar.gz.sha256
+
+4) Extract:
+   tar -xzvf LLM-frontier_clean.tar.gz
+
+This will recreate the full `llm/` directory as packaged on Frontier.
+
+1B. ALTERNATIVE ARCHIVE FORMAT (VERSION B)
+
+For some setups, the archive was split as:
+
+  LLM_frontier_small.tar.gz.part_aa
+  LLM_frontier_small.tar.gz.part_ab
+  ...
+
+To reconstruct and extract:
+
+1) Download all parts from the GitHub "Releases" page
+
+2) Reconstruct and extract:
+   cat LLM_frontier_small.tar.gz.part_* > LLM_frontier_small.tar.gz
+   tar -xzvf LLM_frontier_small.tar.gz
+
+This will also unpack the full working directory `llm/`.
+
+2. ENVIRONMENT SETUP (ON FRONTIER)
+
+1. Load ROCm environment:
+
+   module load rocm/6.2.4
+   export ROCM_HOME=/opt/rocm-6.2.4
+   export HIP_PATH=$ROCM_HOME/lib
+   export PATH=$ROCM_HOME/bin:$PATH
+   export LD_LIBRARY_PATH=$ROCM_HOME/lib:$LD_LIBRARY_PATH
+
+2. Create a virtual environment (Python 3.11):
+
+   ENV_DIR=/lustre/orion/scratch/sohailt/stf006/llm
+   python3.11 -m venv $ENV_DIR
+   source $ENV_DIR/bin/activate
+
+3. INSTALL REQUIRED PYTHON PACKAGES
+
+pip install --upgrade pip setuptools wheel ninja cmake packaging
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.2
+pip install sentencepiece transformers flash-attn --no-build-isolation
+
+4. CLONE AND INSTALL SOURCES
+
+Clone Megatron-LM:
+
+    git clone https://github.com/NVIDIA/Megatron-LM.git
+
+Clone and build DeepSpeed:
+
+    git clone https://github.com/microsoft/DeepSpeed.git
+    cd DeepSpeed
+    python setup.py develop --no-deps
+    cd ..
+
+5. SLURM JOB SCRIPTS USAGE
+
+Make sure your environment is activated:
+
+    source $ENV_DIR/bin/activate
+
+Submit toy DDP job:
+
+    sbatch run_dp_1node.slurm
+
+Submit Megatron-LM only job:
+
+    sbatch run_megatron_only_1node.slurm
+
+Submit Megatron + DeepSpeed job:
+
+    sbatch run_megatron_deepspeed_1node.slurm
+
+6. FILES INCLUDED IN THIS REPOSITORY
+
+- toy_lm_ddp.py                        → Minimal GPT toy model for debugging DDP
+- config/ds_config.json                → DeepSpeed config JSON
+- DeepSpeed/                           → DeepSpeed source (after cloning)
+- Megatron-LM/                         → Megatron-LM source (after cloning)
+- run_dp_1node.slurm                   → SLURM script for DDP only
+- run_megatron_only_1node.slurm       → Megatron-LM without DeepSpeed
+- run_megatron_deepspeed_1node.slurm  → Megatron + DeepSpeed run
+
+7. TROUBLESHOOTING
+
+ If DeepSpeed build fails:
+- Make sure hipcc is in your PATH: `which hipcc`
+- Use `python setup.py develop --no-deps` instead of pip install
+
+ If SLURM jobs hang:
+- Verify correct number of GPUs per node (MI250X = 8)
+- Ensure MASTER_ADDR and MASTER_PORT are properly set in SLURM scripts
+
+8. REFERENCES
+
+- Megatron-LM:     https://github.com/NVIDIA/Megatron-LM
+- DeepSpeed:       https://github.com/microsoft/DeepSpeed
+- ROCm:            https://rocmdocs.amd.com
+- Frontier Guide:  https://docs.olcf.ornl.gov/systems/frontier_user_guide.html
+
+With this setup, you can efficiently train large language models on Frontier
+using Megatron-LM for tensor/pipeline parallelism and DeepSpeed for memory 
+optimization via ZeRO.
